@@ -1,0 +1,33 @@
+name: phototheque
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.0.0
+  flutter_dotenv: ^5.1.0
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.4
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+
+flutter_launcher_icons:
+  android: "launcher_icon"  # Nom pour Android
+  ios: true                 # Générer aussi pour iOS
+  image_path: "assets/icon/galerie.png" # Chemin de votre image
