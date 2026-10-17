@@ -216,7 +216,28 @@ class _AlbumScreenState extends State<AlbumScreen> {
     }
   }
 
-  Future<void> _pickAndUpload() async {
+  String _sanitizeFilename(String originalName) {
+    // 1. Normaliser et retirer les accents (é -> e)
+    var sanitized = originalName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[àáâãäå]'), 'a')
+        .replaceAll(RegExp(r'[èéêë]'), 'e')
+        .replaceAll(RegExp(r'[ìíîï]'), 'i')
+        .replaceAll(RegExp(r'[òóôõö]'), 'o')
+        .replaceAll(RegExp(r'[ùúûü]'), 'u')
+        .replaceAll(RegExp(r'[ç]'), 'c')
+        .replaceAll(RegExp(r'[ñ]'), 'n');
+
+    // 2. Remplacer tout ce qui n'est pas lettre, chiffre, point, tiret ou underscore par un underscore
+    sanitized = sanitized.replaceAll(RegExp(r'[^a-z0-9._-]'), '_');
+
+    // 3. Éviter les underscores multiples
+    sanitized = sanitized.replaceAll(RegExp(r'_+'), '_');
+
+    return sanitized;
+  }
+
+Future<void> _pickAndUpload() async {
     final files = await _picker.pickMultiImage(imageQuality: 100);
     if (files.isEmpty) return;
 
@@ -230,17 +251,26 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
     for (final file in files) {
       try {
-        final compressed = await FlutterImageCompress.compressWithFile(
-          file.path,
+        // 1. Lire les octets (fonctionne sur web ET mobile)
+        final rawBytes = await file.readAsBytes();
+
+        // 2. Compresser avec compressWithList (compatible web)
+        final compressed = await FlutterImageCompress.compressWithList(
+          rawBytes,
           minWidth: 1920,
           minHeight: 1920,
           quality: 80,
           format: CompressFormat.jpeg,
         );
-        if (compressed == null) continue;
 
-        final fileName =
-            '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+        if (compressed.isEmpty) continue;
+
+        // 3. Uploader les octets avec uploadBinary
+        // Nettoyer le nom du fichier
+        final sanitizedOriginalName = _sanitizeFilename(file.name);
+
+         final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_$sanitizedOriginalName';
         final path = '${widget.albumId}/$fileName';
 
         await _supabase.storage
@@ -251,6 +281,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
               fileOptions: const FileOptions(contentType: 'image/jpeg'),
             );
 
+        // 4. Enregistrer en DB
         await _supabase.from('media').insert({
           'album_id': widget.albumId,
           'uploaded_by': _supabase.auth.currentUser!.id,
@@ -260,6 +291,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
         successCount++;
         setState(() => _uploadProgress = successCount);
       } catch (e) {
+        debugPrint('Erreur upload ${file.name}: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Erreur sur ${file.name} : $e')),
