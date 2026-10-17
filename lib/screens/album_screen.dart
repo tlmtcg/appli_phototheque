@@ -35,15 +35,26 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   RealtimeChannel? _channel;
 
+  late final AppLifecycleListener _lifecycleListener;
+
   @override
   void initState() {
     super.initState();
     _loadPhotos();
     _subscribeRealtime();
+
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () {
+        debugPrint('REALTIME: app resumed, reconnecting...');
+        _channel?.unsubscribe();
+        _subscribeRealtime();
+      },
+    );
   }
 
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _channel?.unsubscribe();
     super.dispose();
   }
@@ -145,6 +156,25 @@ class _AlbumScreenState extends State<AlbumScreen> {
             _loadLikes();
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'media',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'album_id',
+            value: widget.albumId,
+          ),
+          callback: (payload) {
+            debugPrint('REALTIME: photo supprimée');
+            final deletedId = payload.oldRecord['id'];
+            if (mounted) {
+              setState(() {
+                _photos.removeWhere((p) => p['id'] == deletedId);
+              });
+            }
+          },
+        )
         .subscribe((status, error) {
           debugPrint('REALTIME STATUS: $status');
           if (error != null) {
@@ -152,7 +182,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
           }
         });
   }
-  
+
   Future<void> _toggleLike(String mediaId) async {
     final userId = _supabase.auth.currentUser!.id;
     final isLiked = _myLikes.contains(mediaId);
