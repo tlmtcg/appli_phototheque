@@ -20,9 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Crée un .env factice pour satisfaire pubspec.yaml
-      # (le contenu n'est PAS lu sur le web, grâce à kIsWeb dans env.dart)
-      - name: Create dummy .env for build
+      # .env factice requis par pubspec.yaml (jamais lu sur le web)
+      - name: Create dummy .env
         run: |
           echo "SUPABASE_URL=placeholder" > .env
           echo "SUPABASE_PUBLISH_KEY=placeholder" >> .env
@@ -34,17 +33,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Debug secrets length
-        run: |
-          echo "URL length: ${#SUPABASE_URL}"
-          echo "KEY length: ${#SUPABASE_PUBLISH_KEY}"
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISH_KEY: ${{ secrets.SUPABASE_PUBLISH_KEY }}
-
-      - name: Clean
-        run: flutter clean
 
       - name: Build Web
         run: |
@@ -64,3 +52,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        
