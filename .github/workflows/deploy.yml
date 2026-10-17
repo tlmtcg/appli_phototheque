@@ -36,7 +36,7 @@ jobs:
 
       - name: Build Web
         run: |
-          flutter build web --release --no-wasm \
+          flutter build web --release \
             --base-href "/appli_phototheque/" \
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --dart-define=SUPABASE_PUBLISH_KEY=${{ secrets.SUPABASE_PUBLISH_KEY }}
@@ -52,3 +52,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        
