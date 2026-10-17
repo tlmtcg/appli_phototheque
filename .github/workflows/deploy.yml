@@ -35,6 +35,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Debug secrets length
+        run: |
+          echo "URL length: ${#SUPABASE_URL}"
+          echo "KEY length: ${#SUPABASE_PUBLISH_KEY}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISH_KEY: ${{ secrets.SUPABASE_PUBLISH_KEY }}
+
       - name: Clean
         run: flutter clean
 
@@ -56,4 +64,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
