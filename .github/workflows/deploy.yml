@@ -2,8 +2,8 @@ name: Deploy Flutter Web to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ] # Déclenché lorsque vous transférez vers la branche main
-  workflow_dispatch: # Permet également de déclencher manuellement
+    branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,13 +20,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create .env file
-        run: |
-          cat > .env <<EOF
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_PUBLISH_KEY }}
-          EOF
-          cat .env
+      # ❌ SUPPRIMÉ : l'étape "Create .env file" ne sert à rien pour Flutter Web
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -40,10 +34,14 @@ jobs:
         run: flutter clean
 
       - name: Build Web
-        run: flutter build web --release --base-href "/appli_phototheque/" --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_PUBLISH_KEY=${{ secrets.SUPABASE_PUBLISH_KEY }}
-        
+        run: |
+          flutter build web --release \
+            --base-href "/appli_phototheque/" \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_PUBLISH_KEY=${{ secrets.SUPABASE_PUBLISH_KEY }}
+
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
