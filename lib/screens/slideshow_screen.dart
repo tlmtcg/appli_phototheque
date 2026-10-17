@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -17,41 +18,24 @@ class SlideshowScreen extends StatefulWidget {
   State<SlideshowScreen> createState() => _SlideshowScreenState();
 }
 
-class _SlideshowScreenState extends State<SlideshowScreen>
-    with SingleTickerProviderStateMixin {
+class _SlideshowScreenState extends State<SlideshowScreen> {
   final _supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> _photos = [];
   int _currentIndex = 0;
   bool _isPlaying = true;
   bool _isLoading = true;
+  bool _isTransitioning = false;
 
   Timer? _timer;
   RealtimeChannel? _channel;
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
 
   static const _slideDuration = Duration(seconds: 4);
-  static const _fadeDuration = Duration(milliseconds: 800);
 
   @override
   void initState() {
     super.initState();
-
-    // Animation de fondu
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: _fadeDuration,
-      value: 1.0,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeInOut,
-    );
-
-    // Cacher la barre système pour un vrai plein écran
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
     _loadPhotos();
     _subscribeRealtime();
   }
@@ -60,8 +44,6 @@ class _SlideshowScreenState extends State<SlideshowScreen>
   void dispose() {
     _timer?.cancel();
     _channel?.unsubscribe();
-    _fadeController.dispose();
-    // Restaurer l'UI système
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -87,10 +69,22 @@ class _SlideshowScreenState extends State<SlideshowScreen>
         _isLoading = false;
       });
 
-      if (_photos.isNotEmpty) _startTimer();
+      // Précharger les 2 premières images pour un fondu fluide
+      if (_photos.isNotEmpty) {
+        _precache(_photos[0]['url']);
+        if (_photos.length > 1) _precache(_photos[1]['url']);
+        _startTimer();
+      }
     } catch (e) {
+      debugPrint('Erreur loadPhotos: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _precache(String url) async {
+    try {
+      await precacheImage(NetworkImage(url), context);
+    } catch (_) {}
   }
 
   void _subscribeRealtime() {
@@ -110,11 +104,11 @@ class _SlideshowScreenState extends State<SlideshowScreen>
             final signedUrl = await _supabase.storage
                 .from('family-media')
                 .createSignedUrl(newMedia['storage_path'], 3600);
-
             if (mounted) {
               setState(() {
                 _photos.add({...newMedia, 'url': signedUrl});
               });
+              _precache(signedUrl);
             }
           },
         )
@@ -130,27 +124,44 @@ class _SlideshowScreenState extends State<SlideshowScreen>
     });
   }
 
-  void _goToNext() {
-    if (_photos.isEmpty) return;
+  Future<void> _goToNext() async {
+    if (_photos.isEmpty || _isTransitioning) return;
 
-    _fadeController.reverse().then((_) {
-      setState(() {
-        _currentIndex = (_currentIndex + 1) % _photos.length;
-      });
-      _fadeController.forward();
+    final nextIndex = (_currentIndex + 1) % _photos.length;
+
+    // Précharger l'image suivante AVANT de lancer la transition
+    await _precache(_photos[nextIndex]['url']);
+    if (!mounted) return;
+
+    setState(() {
+      _isTransitioning = true;
+      _currentIndex = nextIndex;
     });
+
+    // Précharger la suivante pour le prochain tour
+    final following = (_currentIndex + 1) % _photos.length;
+    _precache(_photos[following]['url']);
+
+    // Libérer le flag après l'animation
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (mounted) setState(() => _isTransitioning = false);
   }
 
-  void _goToPrevious() {
-    if (_photos.isEmpty) return;
+  Future<void> _goToPrevious() async {
+    if (_photos.isEmpty || _isTransitioning) return;
 
-    _fadeController.reverse().then((_) {
-      setState(() {
-        _currentIndex =
-            (_currentIndex - 1 + _photos.length) % _photos.length;
-      });
-      _fadeController.forward();
+    final prevIndex = (_currentIndex - 1 + _photos.length) % _photos.length;
+
+    await _precache(_photos[prevIndex]['url']);
+    if (!mounted) return;
+
+    setState(() {
+      _isTransitioning = true;
+      _currentIndex = prevIndex;
     });
+
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (mounted) setState(() => _isTransitioning = false);
   }
 
   void _togglePlay() {
@@ -183,8 +194,11 @@ class _SlideshowScreenState extends State<SlideshowScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.photo_library_outlined,
-                  size: 64, color: Colors.white54),
+              Icon(
+                Icons.photo_library_outlined,
+                size: 64,
+                color: Colors.white54,
+              ),
               SizedBox(height: 16),
               Text(
                 'Aucune photo à afficher',
@@ -202,20 +216,32 @@ class _SlideshowScreenState extends State<SlideshowScreen>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Photo avec fondu
+          // Photo avec fondu fluide
           Positioned.fill(
             child: GestureDetector(
               onTap: _togglePlay,
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: InteractiveViewer(
-                  panEnabled: false,
-                  scaleEnabled: false,
-                  child: Image.network(
-                    currentPhoto['url'],
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true, // évite le flash noir
-                  ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 800),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                // Empêche AnimatedSwitcher d'animer la taille (images)
+                layoutBuilder: (currentChild, previousChildren) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
+                },
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: Image.network(
+                  currentPhoto['url'],
+                  key: ValueKey(currentPhoto['id']), // ← clé unique obligatoire
+                  fit: BoxFit.contain,
+                  // PAS de gaplessPlayback
                 ),
               ),
             ),
@@ -229,9 +255,7 @@ class _SlideshowScreenState extends State<SlideshowScreen>
                 padding: const EdgeInsets.all(12),
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black38,
-                  ),
+                  style: IconButton.styleFrom(backgroundColor: Colors.black38),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
@@ -243,36 +267,40 @@ class _SlideshowScreenState extends State<SlideshowScreen>
             Align(
               alignment: Alignment.centerLeft,
               child: IconButton(
-                icon: const Icon(Icons.chevron_left,
-                    color: Colors.white, size: 48),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black26,
+                icon: const Icon(
+                  Icons.chevron_left,
+                  color: Colors.white,
+                  size: 48,
                 ),
+                style: IconButton.styleFrom(backgroundColor: Colors.black26),
                 onPressed: _goToPrevious,
               ),
             ),
             Align(
               alignment: Alignment.centerRight,
               child: IconButton(
-                icon: const Icon(Icons.chevron_right,
-                    color: Colors.white, size: 48),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black26,
+                icon: const Icon(
+                  Icons.chevron_right,
+                  color: Colors.white,
+                  size: 48,
                 ),
+                style: IconButton.styleFrom(backgroundColor: Colors.black26),
                 onPressed: _goToNext,
               ),
             ),
           ],
 
-          // Indicateur bas : compteur + play/pause + points
+          // Indicateur bas
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: SafeArea(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -286,7 +314,6 @@ class _SlideshowScreenState extends State<SlideshowScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Points indicateurs
                     if (_photos.length <= 20)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -305,14 +332,15 @@ class _SlideshowScreenState extends State<SlideshowScreen>
                         }),
                       ),
                     const SizedBox(height: 8),
-                    // Compteur + play/pause
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           '${_currentIndex + 1} / ${_photos.length}',
                           style: const TextStyle(
-                              color: Colors.white70, fontSize: 14),
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(width: 16),
                         IconButton(
@@ -338,8 +366,10 @@ class _SlideshowScreenState extends State<SlideshowScreen>
             IgnorePointer(
               child: Center(
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(24),
@@ -349,9 +379,10 @@ class _SlideshowScreenState extends State<SlideshowScreen>
                     children: [
                       Icon(Icons.pause, color: Colors.white),
                       SizedBox(width: 8),
-                      Text('En pause',
-                          style:
-                              TextStyle(color: Colors.white, fontSize: 16)),
+                      Text(
+                        'En pause',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
                     ],
                   ),
                 ),
