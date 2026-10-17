@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Web
         # ⚠️ Attention : remplacez le contenu entre guillemets par le nom de votre dépôt
-        run: flutter build web --release --base-href "/NOM_DE_VOTRE_DEPOT/"
+        run: flutter build web --release --base-href "/appli_phototheque/"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
