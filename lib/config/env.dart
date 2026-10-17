@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Env {
@@ -8,6 +8,7 @@ class Env {
     if (kIsWeb) {
       // Sur le web, les valeurs viennent de --dart-define au build
       const url = String.fromEnvironment('SUPABASE_URL');
+      debugPrint('WEB URL utilisée : $url'); 
       if (url.isEmpty) throw Exception('SUPABASE_URL non défini au build web');
       return url;
     } else {
