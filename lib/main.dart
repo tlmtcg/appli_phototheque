@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+// import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/env.dart';
@@ -9,17 +9,54 @@ import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
 
-  await Supabase.initialize(
-    url: Env.supabaseUrl,
-    publishableKey: Env.supabasePublishKey,
-    authOptions: const FlutterAuthClientOptions(
-      authFlowType: AuthFlowType.implicit,
-    ),
-  );
+  if (!Env.isConfigured) {
+    debugPrint(
+      'ERREUR : SUPABASE_URL ou SUPABASE_PUBLISH_KEY est vide. '
+      'Vérifiez les --dart-define dans le workflow GitHub Actions.',
+    );
+    runApp(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Configuration manquante : variables Supabase vides.'),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+
+  try {
+    await Supabase.initialize(
+      url: Env.supabaseUrl,
+      publishableKey: Env.supabasePublishKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.implicit,
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint('Échec de l\'initialisation de Supabase : $e');
+    debugPrint('$stack');
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Échec de l\'initialisation de Supabase :\n$e',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
 
   runApp(const MainApp());
 }
