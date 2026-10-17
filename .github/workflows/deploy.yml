@@ -20,7 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ❌ SUPPRIMÉ : l'étape "Create .env file" ne sert à rien pour Flutter Web
+      # Crée un .env factice pour satisfaire pubspec.yaml
+      # (le contenu n'est PAS lu sur le web, grâce à kIsWeb dans env.dart)
+      - name: Create dummy .env for build
+        run: |
+          echo "SUPABASE_URL=placeholder" > .env
+          echo "SUPABASE_PUBLISH_KEY=placeholder" >> .env
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -51,3 +56,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        

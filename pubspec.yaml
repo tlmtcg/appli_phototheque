@@ -24,8 +24,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # assets:
-  #   - .env
+  assets:
+    - .env
 
 flutter_launcher_icons:
   android: "launcher_icon"  # Nom pour Android
