@@ -124,6 +124,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
             value: widget.albumId,
           ),
           callback: (payload) async {
+            debugPrint('REALTIME: nouvelle photo reçue');
             final newMedia = payload.newRecord;
             final signedUrl = await _supabase.storage
                 .from('family-media')
@@ -139,11 +140,19 @@ class _AlbumScreenState extends State<AlbumScreen> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'likes',
-          callback: (_) => _loadLikes(),
+          callback: (_) {
+            debugPrint('REALTIME: like modifié');
+            _loadLikes();
+          },
         )
-        .subscribe();
+        .subscribe((status, error) {
+          debugPrint('REALTIME STATUS: $status');
+          if (error != null) {
+            debugPrint('REALTIME ERROR: $error');
+          }
+        });
   }
-
+  
   Future<void> _toggleLike(String mediaId) async {
     final userId = _supabase.auth.currentUser!.id;
     final isLiked = _myLikes.contains(mediaId);
