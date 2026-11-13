@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:phototheque/screens/profile_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/env.dart';
@@ -100,10 +101,56 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Phototheque',
+      title: 'Photothèque',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: _session != null ? const HomeScreen() : const LoginScreen(),
+      home: _session != null
+          ? _AuthGate(session: _session!)
+          : const LoginScreen(),
     );
+  }
+}
+
+class _AuthGate extends StatefulWidget {
+  final Session session;
+  const _AuthGate({required this.session});
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool? _hasProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkProfile();
+  }
+
+  Future<void> _checkProfile() async {
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', widget.session.user.id)
+          .maybeSingle();
+      if (mounted) setState(() => _hasProfile = profile != null);
+    } catch (_) {
+      if (mounted) setState(() => _hasProfile = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasProfile == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!_hasProfile!) {
+      return ProfileSetupScreen(
+        onComplete: () => setState(() => _hasProfile = true),
+      );
+    }
+    return const HomeScreen();
   }
 }

@@ -237,7 +237,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
     return sanitized;
   }
 
-Future<void> _pickAndUpload() async {
+  Future<void> _pickAndUpload() async {
     final files = await _picker.pickMultiImage(imageQuality: 100);
     if (files.isEmpty) return;
 
@@ -269,7 +269,7 @@ Future<void> _pickAndUpload() async {
         // Nettoyer le nom du fichier
         final sanitizedOriginalName = _sanitizeFilename(file.name);
 
-         final fileName =
+        final fileName =
             '${DateTime.now().millisecondsSinceEpoch}_$sanitizedOriginalName';
         final path = '${widget.albumId}/$fileName';
 
@@ -569,29 +569,46 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
     }
   }
 
-  Future<void> _addComment() async {
+Future<void> _addComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
-
     _commentController.clear();
 
     try {
+      final userId = _supabase.auth.currentUser!.id;
+
+      // Récupérer le display_name du profil
+      String authorName = 'Anonyme';
+      try {
+        final profile = await _supabase
+            .from('profiles')
+            .select('display_name')
+            .eq('id', userId)
+            .single();
+        authorName = profile['display_name'] as String;
+      } catch (_) {
+        // Fallback pour les anciens comptes sans profil
+        authorName =
+            _supabase.auth.currentUser!.email?.split('@').first ?? 'Anonyme';
+      }
+
       await _supabase.from('comments').insert({
         'media_id': widget.photo['id'],
-        'user_id': _supabase.auth.currentUser!.id,
+        'user_id': userId,
         'content': text,
-        'author_name':
-            _supabase.auth.currentUser!.email?.split('@').first ?? 'Anonyme',
+        'author_name': authorName,
       });
+
       await _loadComments();
     } catch (e) {
+      debugPrint('Erreur commentaire : $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Erreur : $e')));
       }
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -600,13 +617,16 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onDelete();
-            },
-          ),
+          // N'afficher le bouton de suppression que si l'utilisateur est l'uploadeur
+          if (widget.photo['uploaded_by'] ==
+              Supabase.instance.client.auth.currentUser?.id)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onDelete();
+              },
+            ),
         ],
       ),
       body: Column(
@@ -669,7 +689,7 @@ class _PhotoViewerScreenState extends State<_PhotoViewerScreen> {
                             itemCount: _comments.length,
                             itemBuilder: (context, i) {
                               final c = _comments[i];
-                              
+
                               final name =
                                   c['author_name'] as String? ?? 'Anonyme';
 
